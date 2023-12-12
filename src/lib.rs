@@ -40,12 +40,12 @@ pub async fn run() -> Result<(), impl std::error::Error> {
                                 Err(wgpu::SurfaceError::OutOfMemory) => win_target.exit(),
                                 Err(e) => eprintln!("{:?}", e),
                             }
-                        },
+                        }
                         _ => {}
                     }
                 }
-            },
-            _ => {},
+            }
+            _ => {}
         }
     })
 }
@@ -59,6 +59,8 @@ struct State {
     size: winit::dpi::PhysicalSize<u32>,
     clear_color: wgpu::Color,
     render_pipeline: wgpu::RenderPipeline,
+    tri_color_pipeline: wgpu::RenderPipeline,
+    use_color: bool,
 
     // Window must be declared last as the surface contains unsafe references to the window
     window: Window,
@@ -91,7 +93,6 @@ impl State {
                 limits: wgpu::Limits::default(),
                 label: None,
             },
-
             None,
         ).await.unwrap();
 
@@ -143,6 +144,52 @@ impl State {
                 entry_point: "fs_main",
                 targets: &[Some(wgpu::ColorTargetState {
                     format: config.format,
+                    blend: Some(wgpu::BlendState {
+                        color: wgpu::BlendComponent::REPLACE,
+                        alpha: wgpu::BlendComponent::REPLACE,
+                    }),
+                    write_mask: wgpu::ColorWrites::ALL,
+                })],
+            }),
+            primitive: wgpu::PrimitiveState {
+                topology: wgpu::PrimitiveTopology::TriangleList,
+                strip_index_format: None,
+                front_face: wgpu::FrontFace::Ccw,
+                cull_mode: Some(wgpu::Face::Back),
+                // Setting this to anything other than Fill requires Features::POLYGON_MODE_LINE
+                // or Features::POLYGON_MODE_POINT
+                polygon_mode: wgpu::PolygonMode::Fill,
+                // Requires Features::DEPTH_CLIP_CONTROL
+                unclipped_depth: false,
+                // Requires Features::CONSERVATIVE_RASTERIZATION
+                conservative: false,
+            },
+            depth_stencil: None,
+            multisample: wgpu::MultisampleState {
+                count: 1,
+                mask: !0,
+                alpha_to_coverage_enabled: false,
+            },
+            // If the pipeline will be used with a multiview render pass, this
+            // indicates how many array layers the attachments will have.
+            multiview: None,
+        });
+
+        let shader = device.create_shader_module(wgpu::include_wgsl!("challenge.wgsl"));
+
+        let tri_color_pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+            label: Some("Render Pipeline"),
+            layout: Some(&render_pipeline_layout),
+            vertex: wgpu::VertexState {
+                module: &shader,
+                entry_point: "vs_main",
+                buffers: &[],
+            },
+            fragment: Some(wgpu::FragmentState {
+                module: &shader,
+                entry_point: "fs_main",
+                targets: &[Some(wgpu::ColorTargetState {
+                    format: config.format,
                     blend: Some(wgpu::BlendState::REPLACE),
                     write_mask: wgpu::ColorWrites::ALL,
                 })],
@@ -152,9 +199,9 @@ impl State {
                 strip_index_format: None,
                 front_face: wgpu::FrontFace::Ccw,
                 cull_mode: Some(wgpu::Face::Back),
+                // Setting this to anything other than Fill requires Features::NON_FILL_POLYGON_MODE
                 polygon_mode: wgpu::PolygonMode::Fill,
-                unclipped_depth: false,
-                conservative: false,
+                ..Default::default()
             },
             depth_stencil: None,
             multisample: wgpu::MultisampleState {
@@ -162,8 +209,12 @@ impl State {
                 mask: !0,
                 alpha_to_coverage_enabled: false,
             },
+            // If the pipeline will be used with a multiview render pass, this
+            // indicates how many array layers the attachments will have.
             multiview: None,
         });
+
+        let use_color = true;
 
         Self {
             window,
@@ -174,6 +225,8 @@ impl State {
             size,
             clear_color,
             render_pipeline,
+            tri_color_pipeline,
+            use_color,
         }
     }
 
@@ -206,14 +259,23 @@ impl State {
                 self.window.request_redraw();
 
                 true
+            }
+            WindowEvent::KeyboardInput {
+                event: KeyEvent {
+                    logical_key: Key::Named(NamedKey::Space),
+                    state,
+                    ..
+            },
+                ..
+            } => {
+                self.use_color = !state.is_pressed();
+                true
             },
             _ => false,
         }
     }
 
-    fn update(&mut self) {
-
-    }
+    fn update(&mut self) {}
 
     fn render(&mut self) -> Result<(), wgpu::SurfaceError> {
         let output = self.surface.get_current_texture()?;
@@ -238,7 +300,7 @@ impl State {
             timestamp_writes: None,
         });
 
-        render_pass.set_pipeline(&self.render_pipeline);
+        render_pass.set_pipeline(if self.use_color { &self.render_pipeline } else { &self.tri_color_pipeline });
         render_pass.draw(0..3, 0..1);
 
         drop(render_pass);
