@@ -7,7 +7,8 @@ authors = ["Ian Laidlaw"]
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-winit = "0.29.4"
+winit = { version = "0.29.4", features = ["rwh_05"] }
 env_logger = "0.10.1"
 log = "0.4.20"
 wgpu = "0.18.0"
+pollster = "0.3.0"
