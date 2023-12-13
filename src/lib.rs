@@ -1,4 +1,5 @@
 mod state;
+mod texture;
 
 use crate::state::State;
 use winit::event::{ElementState, Event, KeyEvent, WindowEvent};
