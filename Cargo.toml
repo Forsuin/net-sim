@@ -15,4 +15,3 @@ pollster = "0.3.0"
 bytemuck = { version = "1.14.0", features = ["derive"] }
 image = "0.24.7"
 anyhow = "1.0.75"
-
